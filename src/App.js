@@ -1,19 +1,22 @@
 import React, { Component } from 'react';
-import BigCalendar from 'react-big-calendar';
-import moment from 'moment';
+import CalendarMain from './components/CalendarMain';
 import './App.css';
-import 'react-big-calendar/lib/css/react-big-calendar.css';
 
 const VIEW_CONSTANTS = ['month','week','work_week','day','agenda']
 
-const localizer = BigCalendar.momentLocalizer(moment);
-
-
 const decideDefaultView = (view) => {
   if (view && VIEW_CONSTANTS.includes(view)) {
-    return {status: true, view};
+    return view;
   }
-  return {status: false, view: VIEW_CONSTANTS[0]};
+  return VIEW_CONSTANTS[0];
+}
+
+const handleSearchQueries = (q, events) => events.filter(f => f.title.includes(q));
+
+const urlSearializer = (view, q) => {
+  if (!q && !view) return `/${VIEW_CONSTANTS[0]}`;
+  if (!q && view) return `/${decideDefaultView(view)}`;
+  return `/${decideDefaultView(view)}/?q=${q}`;
 }
 
 class App extends Component {
@@ -23,30 +26,66 @@ class App extends Component {
     this.state = {
       events: [],
     };
+    this.defaultCopy = [];
     this.handleSelect = this.handleSelect.bind(this);
     this.handleRange = this.handleRange.bind(this);
+    this.updateStatus = this.updateStatus.bind(this);
   }
 
   componentDidMount() {
-    this.viewObj = decideDefaultView(this.props.match.params.view);
-    if (!this.viewObj.status) {
-      this.props.history.push(`/${this.viewObj.view}`);
+    const {
+      search,
+    } = this.props.location;
+    const q = new URLSearchParams(search).get("q");
+    if (q) {
+      this.updateStatus(q);
     }
   }
 
+  updateStatus(q, update = true) {
+    const {
+      view,
+    } = this.props.match.params;
+    const newSt = handleSearchQueries(q, this.defaultCopy);
+    this.setState({
+      events: newSt,
+    }, () => {
+      if (update) {
+        this.defaultCopy = newSt
+      }
+      this.props.history.push(urlSearializer(view, q));
+    });
+  }
+
+  revert() {
+    const {
+      view,
+    } = this.props.match.params;
+    this.setState({
+      events: this.defaultCopy.slice(),
+    }, () => {
+      this.props.history.push(urlSearializer(view, ""));
+      if (this.input) {
+        this.input.value = "";
+      }
+    });
+  }
+
   handleSelect({ start, end }) {
-    const title = window.prompt('New Event name')
-    if (title)
-      this.setState({
-        events: [
-          ...this.state.events,
-          {
-            start,
-            end,
-            title,
-          },
-        ],
-      })
+    const title = window.prompt('New Event name');
+    if (title) {
+      const newSt = [
+        ...this.state.events,
+        {
+          start,
+          end,
+          title,
+        },
+      ];
+        this.setState({
+          events: newSt
+        }, () => this.defaultCopy = newSt);
+    }
   }
 
   handleRange(_, view) {
@@ -66,16 +105,13 @@ class App extends Component {
 
     return (
       <div className="App">
-        <BigCalendar
-          selectable
-          localizer={localizer}
+        <input ref={ref => this.input = ref} type="text" name="" onChange={e => this.updateStatus(e.target.value, false)} id=""/>
+        <button onClick={() => this.revert()}>Cancel</button>
+        <CalendarMain
+          view={view && VIEW_CONSTANTS.includes(view) ? view : VIEW_CONSTANTS[0]}
           events={events}
-          defaultView={view && VIEW_CONSTANTS.includes(view) ? view : VIEW_CONSTANTS[0]}
-          scrollToTime={new Date(1970, 1, 1, 6)}
-          defaultDate={new Date()}
-          onSelectEvent={event => alert(event.title)}
-          onSelectSlot={this.handleSelect}
-          onRangeChange={this.handleRange}
+          handleSelect={this.handleSelect}
+          handleRange={this.handleRange}
         />
       </div>
     );
